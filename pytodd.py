@@ -206,12 +206,9 @@ def main():
     print("# terms after properization: ", A.shape[1])
     if args.verbose:
         print("Final Matrix")
-
-    if args.verbose:
         print(A)
 
-    if args.output:
-        np.savetxt(args.output, A, delimiter=",", fmt="%d")
+    np.savetxt(args.output, A, delimiter=",", fmt="%d")
 
 
 if __name__ == "__main__":
