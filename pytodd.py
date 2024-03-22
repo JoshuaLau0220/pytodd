@@ -1,5 +1,5 @@
 import numpy as np
-from itertools import combinations
+from itertools import combinations, combinations_with_replacement
 
 """
 An implementation of the TODD algorithm for reducing the T count of a quantum circuit in the paper
@@ -149,19 +149,50 @@ def todd(A, verbose=False):
 
     return A
 
+def get_signature_tensor(A):
+    if A.size == 0:
+        return np.array([])
+    n = A.shape[0]
+    m = A.shape[1]
+    
+    S = np.zeros((n,n,n))
+    for alpha, beta, gamma in combinations_with_replacement(range(n), 3):
+        for l in range(m):
+            S[alpha][beta][gamma] += A[alpha][l]*A[beta][l]*A[gamma][l] 
+    
+    S = S % 2 # normalize
+    return S
+
+def signature_check(A, B, verbose):
+    S_A = get_signature_tensor(A)
+    S_B = get_signature_tensor(B)
+    if A.size == 0:
+        print("Initial matrix equals to Final matrix :", not np.any(S_B)) 
+    elif B.size == 0:
+        print("Initial matrix equals to Final matrix :", not np.any(S_A))
+    else: 
+        print("Initial matrix equals to Final matrix :", np.array_equal(S_A, S_B))
+    
+    if verbose:
+        print("--- S_old_A ---")
+        print(S_A)
+        print("--- S_new_A ---")
+        print(S_B)
+
 
 def main():
     from argparse import ArgumentParser
 
     parser = ArgumentParser(
         description='An implementation of the TODD algorithm for reducing the T count of a quantum circuit in the paper "An Efficient Quantum Compiler that reduces $T$ count" by Luke E Heyfron and Earl T Campbell (2019). arXiv link: https://arxiv.org/abs/1712.01557"',
-    )
+    )    
 
     parser.add_argument(
         "input",
         type=str,
         help="Path to a .csv file containing the matrix to be optimized",
     )
+    
     parser.add_argument(
         "output",
         type=str,
@@ -178,6 +209,9 @@ def main():
     args = parser.parse_args()
 
     A = np.loadtxt(args.input, delimiter=",", dtype=int)
+    # check if input is non-empty
+    if A.size == 0:
+        raise ValueError("Input matrix must not be empty") 
 
     # checks if the input matrix is binary
     for row in A:
@@ -194,21 +228,25 @@ def main():
     # # generate random 0-1 matrix
     # A = np.random.randint(2, size=(6, 100))
 
-    print("# terms in the initial matrix after properization: ", A.shape[1])
+    print("# terms in the initial matrix before properization: ", A.shape[1] if A.size > 0 else 0)
     A = properize(A)
     if args.verbose:
         print("Initial Matrix after properization")
         print(A)
-    print("# terms after properization: ", A.shape[1])
+        
+    print("# terms in the initial matrix after properization: ", A.shape[1] if A.size > 0 else 0)
 
-    A = todd(A, verbose=args.verbose)
+    new_A = todd(A, verbose=args.verbose)
 
-    print("# terms after properization: ", A.shape[1])
+    print("# terms after todd & properization: ", 0 if new_A.size == 0 else new_A.shape[1])
+    
     if args.verbose:
         print("Final Matrix")
         print(A)
+        
+    signature_check(A, new_A, verbose=args.verbose)
 
-    np.savetxt(args.output, A, delimiter=",", fmt="%d")
+    np.savetxt(args.output, new_A, delimiter=",", fmt="%d")
 
 
 if __name__ == "__main__":

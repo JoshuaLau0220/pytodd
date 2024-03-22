@@ -1,2 +1,3 @@
 examples/outputs/*
 !examples/outputs/.gitkeep
+*.DS_Store
