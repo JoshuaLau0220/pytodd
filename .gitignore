@@ -1,3 +1,4 @@
 examples/outputs/*
 !examples/outputs/.gitkeep
 *.DS_Store
+__pycache__

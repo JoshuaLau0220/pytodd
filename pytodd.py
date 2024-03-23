@@ -1,5 +1,5 @@
 import numpy as np
-from itertools import combinations, combinations_with_replacement
+import itertools
 
 """
 An implementation of the TODD algorithm for reducing the T count of a quantum circuit in the paper
@@ -12,29 +12,37 @@ def get_nullspace(A):
     Method is based on the following stackexchange answer:
     [linear algebra - how to find null space basis directly by matrix calculation - Mathematics Stack Exchange](https://math.stackexchange.com/questions/1612616/how-to-find-null-space-basis-directly-by-matrix-calculation)
     """
-    if A.shape[0] > A.shape[1]:
-        # nullspace must be the zero vector
-        return np.array([])
 
     augmented = np.hstack((A.T, np.eye(A.shape[1], dtype=int)))
 
     n_rows = A.shape[1]
     n_cols = A.shape[0]
 
-    for i in range(n_cols):
+    curr_pivot = 0
+
+    # make the first n_cols columns of the augmented matrix into rref form
+    for col in range(n_cols):
         # make main diagonal non-zero
-        if augmented[i, i] == 0:
-            for j in range(i + 1, n_rows):
-                if augmented[j, i] != 0:
-                    augmented[i] = (augmented[i] + augmented[j]) % 2
+        if augmented[curr_pivot, col] == 0:
+            for row in range(curr_pivot + 1, n_rows):
+                if augmented[row, col] != 0:
+                    augmented[curr_pivot] += augmented[row]
+                    augmented[curr_pivot] %= 2
                     break
+            else:
+                continue
 
         # get other rows to have 0
-        for j in range(i + 1, n_rows):
-            if augmented[j, i] != 0:
-                augmented[j] = (augmented[j] + augmented[i]) % 2
+        for row in range(curr_pivot + 1, n_rows):
+            if augmented[row, col] != 0:
+                augmented[row] += augmented[curr_pivot]
+                augmented[row] %= 2
 
-    return augmented[n_cols:, n_cols:].T
+        curr_pivot += 1
+        if curr_pivot == n_rows:
+            break
+
+    return augmented[curr_pivot:, n_cols:].T
 
 
 def get_chi_matrix(A, z):
@@ -45,7 +53,7 @@ def get_chi_matrix(A, z):
 
     chi_matrix = []
 
-    for a, b, c in combinations(range(A.shape[0]), 3):
+    for a, b, c in itertools.combinations(range(A.shape[0]), 3):
         row_a = A[a]
         row_b = A[b]
         row_c = A[c]
@@ -92,7 +100,7 @@ def properize(A):
 def todd_once(A, verbose=False):
     seen_z = set()
 
-    for a, b in combinations(range(A.shape[1]), 2):
+    for a, b in itertools.combinations(range(A.shape[1]), 2):
         matrix = A
         z = (A[:, a] + A[:, b]) % 2
         if z.data.tobytes() in seen_z:
@@ -149,30 +157,31 @@ def todd(A, verbose=False):
 
     return A
 
+
 def get_signature_tensor(A):
     if A.size == 0:
         return np.array([])
     n = A.shape[0]
     m = A.shape[1]
-    
-    S = np.zeros((n,n,n))
-    for alpha, beta, gamma in combinations_with_replacement(range(n), 3):
-        for l in range(m):
-            S[alpha][beta][gamma] += A[alpha][l]*A[beta][l]*A[gamma][l] 
-    
-    S = S % 2 # normalize
-    return S
+
+    S = np.zeros((n, n, n))
+    for alpha, beta, gamma in itertools.combinations_with_replacement(range(n), 3):
+        for i in range(m):
+            S[alpha][beta][gamma] += A[alpha][i] * A[beta][i] * A[gamma][i]
+
+    return S % 2
+
 
 def signature_check(A, B, verbose):
     S_A = get_signature_tensor(A)
     S_B = get_signature_tensor(B)
     if A.size == 0:
-        print("Initial matrix equals to Final matrix :", not np.any(S_B)) 
+        print("Initial matrix equals to Final matrix :", not np.any(S_B))
     elif B.size == 0:
         print("Initial matrix equals to Final matrix :", not np.any(S_A))
-    else: 
+    else:
         print("Initial matrix equals to Final matrix :", np.array_equal(S_A, S_B))
-    
+
     if verbose:
         print("--- S_old_A ---")
         print(S_A)
@@ -185,14 +194,14 @@ def main():
 
     parser = ArgumentParser(
         description='An implementation of the TODD algorithm for reducing the T count of a quantum circuit in the paper "An Efficient Quantum Compiler that reduces $T$ count" by Luke E Heyfron and Earl T Campbell (2019). arXiv link: https://arxiv.org/abs/1712.01557"',
-    )    
+    )
 
     parser.add_argument(
         "input",
         type=str,
         help="Path to a .csv file containing the matrix to be optimized",
     )
-    
+
     parser.add_argument(
         "output",
         type=str,
@@ -209,9 +218,6 @@ def main():
     args = parser.parse_args()
 
     A = np.loadtxt(args.input, delimiter=",", dtype=int)
-    # check if input is non-empty
-    if A.size == 0:
-        raise ValueError("Input matrix must not be empty") 
 
     # checks if the input matrix is binary
     for row in A:
@@ -228,22 +234,30 @@ def main():
     # # generate random 0-1 matrix
     # A = np.random.randint(2, size=(6, 100))
 
-    print("# terms in the initial matrix before properization: ", A.shape[1] if A.size > 0 else 0)
+    print(
+        "# terms in the initial matrix before properization: ",
+        A.shape[1] if A.size > 0 else 0,
+    )
     A = properize(A)
     if args.verbose:
         print("Initial Matrix after properization")
         print(A)
-        
-    print("# terms in the initial matrix after properization: ", A.shape[1] if A.size > 0 else 0)
+
+    print(
+        "# terms in the initial matrix after properization: ",
+        A.shape[1] if A.size > 0 else 0,
+    )
 
     new_A = todd(A, verbose=args.verbose)
 
-    print("# terms after todd & properization: ", 0 if new_A.size == 0 else new_A.shape[1])
-    
+    print(
+        "# terms after todd & properization: ", 0 if new_A.size == 0 else new_A.shape[1]
+    )
+
     if args.verbose:
         print("Final Matrix")
         print(A)
-        
+
     signature_check(A, new_A, verbose=args.verbose)
 
     np.savetxt(args.output, new_A, delimiter=",", fmt="%d")
